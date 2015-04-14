@@ -8,7 +8,8 @@ import (
 	"log"
 	"net"
 	"os"
-	//	"strings"
+	"strings"
+	"time"
 )
 
 func checkError(err error) {
@@ -20,19 +21,31 @@ func checkError(err error) {
 
 /* slower, by we can print/log everything */
 func myrawcopy(dst, src net.Conn) (written int64, err error) {
+
 	buf := make([]byte, 32*1024)
 	for {
 		nr, er := src.Read(buf)
 		if nr > 0 {
 
-			b := buf[0:nr]
-			//			s := string(b)
-			//			if strings.Contains(s, "localhost:8000") {
-			//				s = strings.Replace(s, "localhost:8000", "gigacard1.gigacloud.tw:443", 1)
-			//				b = []byte(s)
-			//			}
+			fmt.Printf("%v ms : %s -> %s (%v + %v)\n", time.Now().UnixNano()/1000000, src.RemoteAddr(), dst.RemoteAddr(), written, nr)
 
-			fmt.Printf("%s", string(b))
+			b := buf[0:nr]
+
+			if !strings.Contains(src.RemoteAddr().String(), "192.168.1.22:443") {
+
+				if nr > 100 {
+					bs := string(b[:100])
+					if strings.Contains(bs, "HTTP") {
+						i := strings.Index(bs, "\n")
+						if i == -1 {
+							fmt.Printf("%s\n\n", bs)
+						} else {
+							fmt.Printf("%s\n\n", bs[:i])
+						}
+					}
+				}
+			}
+
 			nw, ew := dst.Write(b)
 			if nw > 0 {
 				written += int64(nw)
@@ -82,7 +95,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("server: loadkeys: %s", err)
 	}
-	config := tls.Config{Certificates: []tls.Certificate{cert}}
+	config := tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS10,
+	}
 	config.Rand = rand.Reader
 	service := "0.0.0.0:443"
 	listener, err := tls.Listen("tcp", service, &config)
