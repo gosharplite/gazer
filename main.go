@@ -7,6 +7,8 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -24,6 +26,9 @@ func myrawcopy(dst, src net.Conn) (written int64, err error) {
 
 	buf := make([]byte, 32*1024)
 	for {
+
+		go logIP(src.RemoteAddr().String(), dst.RemoteAddr().String())
+
 		nr, er := src.Read(buf)
 		if nr > 0 {
 
@@ -78,6 +83,7 @@ func myiocopy(dst net.Conn, src net.Conn) {
 }
 
 func handleclient(c net.Conn) {
+
 	config := tls.Config{InsecureSkipVerify: true}
 	conn, err := tls.Dial("tcp", "gigacard1.gigacloud.tw:443", &config)
 	checkError(err)
@@ -115,5 +121,15 @@ func main() {
 		defer conn.Close()
 		log.Printf("server: accepted from %s", conn.RemoteAddr())
 		go handleclient(conn)
+	}
+}
+
+func logIP(src, dst string) {
+
+	_, err := http.PostForm("http://192.168.1.32:8080/gazer/logip",
+		url.Values{"src": {src}, "dst": {dst}})
+
+	if err != nil {
+		log.Printf("err: http.PostForm: %v", err)
 	}
 }
