@@ -14,17 +14,11 @@ import (
 	"time"
 )
 
-func checkError(err error) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
-		os.Exit(1)
-	}
-}
-
 /* slower, by we can print/log everything */
 func myrawcopy(dst, src net.Conn) (written int64, err error) {
 
 	buf := make([]byte, 32*1024)
+
 	for {
 
 		go logIP(src.RemoteAddr().String(), dst.RemoteAddr().String())
@@ -72,12 +66,15 @@ func myrawcopy(dst, src net.Conn) (written int64, err error) {
 			break
 		}
 	}
+
 	return written, err
 }
 
 func myiocopy(dst net.Conn, src net.Conn) {
-	myrawcopy(dst, src)
+
 	//io.Copy(dst,src);
+	myrawcopy(dst, src)
+
 	dst.Close()
 	src.Close()
 }
@@ -85,41 +82,57 @@ func myiocopy(dst net.Conn, src net.Conn) {
 func handleclient(c net.Conn) {
 
 	config := tls.Config{InsecureSkipVerify: true}
-	conn, err := tls.Dial("tcp", "gigacard1.gigacloud.tw:443", &config)
-	checkError(err)
 
+	// Set "192.168.1.22    gigacard1.gigacloud.tw" in /etc/hosts.
+	conn, err := tls.Dial("tcp", "gigacard1.gigacloud.tw:443", &config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
+		os.Exit(1)
+	}
+
+	// gazer to IIS
 	go myiocopy(conn, c)
 
+	// IIS to gazer
 	//io.Copy(c, conn)
 	myrawcopy(c, conn)
+
 	c.Close()
 	conn.Close()
 }
 
 func main() {
+
 	cert, err := tls.LoadX509KeyPair("cert.pem", "server.key")
 	if err != nil {
 		log.Fatalf("server: loadkeys: %s", err)
 	}
+
 	config := tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS10,
 	}
+
 	config.Rand = rand.Reader
+
 	service := "0.0.0.0:443"
+
 	listener, err := tls.Listen("tcp", service, &config)
 	if err != nil {
 		log.Fatalf("server: listen: %s", err)
 	}
+
 	log.Printf("server: listening on %s for https, connects to https://example.com:443", service)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("server: accept: %s", err)
 			break
 		}
-		defer conn.Close()
+
 		log.Printf("server: accepted from %s", conn.RemoteAddr())
+
 		go handleclient(conn)
 	}
 }
